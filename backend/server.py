@@ -598,6 +598,235 @@ async def create_comment(data: CommentCreate, request: Request):
             await ws_manager.broadcast(lst["board_id"], {"type": "comment_added", "board_id": lst["board_id"]})
     return comment_doc
 
+# ==================== TEMPLATES ====================
+
+BOARD_TEMPLATES = [
+    {
+        "template_id": "school_project",
+        "name": "Projet Scolaire",
+        "description": "Gerez un projet scolaire du debut a la fin",
+        "color": "#4F46E5",
+        "icon": "graduation-cap",
+        "lists": [
+            {"title": "Recherche", "cards": [
+                {"title": "Definir le sujet", "priority": "high", "tags": ["Recherche"], "checklists": [{"text": "Choisir le theme", "completed": False}, {"text": "Valider avec le prof", "completed": False}]},
+                {"title": "Sources bibliographiques", "priority": "medium", "tags": ["Recherche"]},
+            ]},
+            {"title": "Redaction", "cards": [
+                {"title": "Plan detaille", "priority": "high", "tags": ["Redaction"]},
+                {"title": "Introduction", "priority": "medium", "tags": ["Redaction"]},
+                {"title": "Developpement", "priority": "medium", "tags": ["Redaction"]},
+            ]},
+            {"title": "Revision", "cards": [
+                {"title": "Relecture orthographe", "priority": "medium", "tags": ["Revision"]},
+            ]},
+            {"title": "Rendu", "cards": []},
+        ],
+    },
+    {
+        "template_id": "exam_revision",
+        "name": "Revisions Examens",
+        "description": "Planifiez et suivez vos revisions",
+        "color": "#10B981",
+        "icon": "book-open",
+        "lists": [
+            {"title": "A reviser", "cards": [
+                {"title": "Chapitre 1 - Bases", "priority": "high", "tags": ["Maths"], "checklists": [{"text": "Lire le cours", "completed": False}, {"text": "Faire les exercices", "completed": False}, {"text": "QCM entrainement", "completed": False}]},
+                {"title": "Chapitre 2 - Avance", "priority": "medium", "tags": ["Maths"]},
+                {"title": "Dates cles", "priority": "high", "tags": ["Histoire"]},
+            ]},
+            {"title": "En cours de revision", "cards": []},
+            {"title": "Maitrise", "cards": []},
+        ],
+    },
+    {
+        "template_id": "semester_plan",
+        "name": "Planning Semestre",
+        "description": "Organisez votre semestre entier",
+        "color": "#F59E0B",
+        "icon": "calendar",
+        "lists": [
+            {"title": "Ce mois-ci", "cards": [
+                {"title": "Devoir de maths", "priority": "urgent", "tags": ["Maths", "Devoir"]},
+                {"title": "Expose histoire", "priority": "high", "tags": ["Histoire", "Projet"]},
+            ]},
+            {"title": "Mois prochain", "cards": [
+                {"title": "Examen partiel", "priority": "high", "tags": ["Examen"]},
+            ]},
+            {"title": "Plus tard", "cards": []},
+            {"title": "Termine", "cards": []},
+        ],
+    },
+    {
+        "template_id": "agile_sprint",
+        "name": "Sprint Agile",
+        "description": "Pour les projets informatiques en equipe",
+        "color": "#8B5CF6",
+        "icon": "rocket",
+        "lists": [
+            {"title": "Backlog", "cards": [
+                {"title": "User story: Connexion", "priority": "high", "tags": ["Feature"], "checklists": [{"text": "Maquette UI", "completed": False}, {"text": "API backend", "completed": False}, {"text": "Tests", "completed": False}]},
+                {"title": "User story: Dashboard", "priority": "medium", "tags": ["Feature"]},
+                {"title": "Bug: Responsive menu", "priority": "urgent", "tags": ["Bug"]},
+            ]},
+            {"title": "Sprint en cours", "cards": []},
+            {"title": "En review", "cards": []},
+            {"title": "Done", "cards": []},
+        ],
+    },
+    {
+        "template_id": "reading_notes",
+        "name": "Lecture & Recherche",
+        "description": "Suivez vos lectures et prises de notes",
+        "color": "#EC4899",
+        "icon": "book",
+        "lists": [
+            {"title": "A lire", "cards": [
+                {"title": "Article scientifique X", "priority": "medium", "tags": ["Article"]},
+                {"title": "Livre: Introduction a...", "priority": "low", "tags": ["Livre"]},
+            ]},
+            {"title": "En lecture", "cards": []},
+            {"title": "Notes prises", "cards": []},
+            {"title": "Termine", "cards": []},
+        ],
+    },
+]
+
+@api_router.get("/templates")
+async def get_templates():
+    return BOARD_TEMPLATES
+
+@api_router.post("/boards/from-template")
+async def create_board_from_template(request: Request, template_id: str = None, title: str = None):
+    user = await get_current_user(request)
+    body = await request.json()
+    template_id = body.get("template_id")
+    custom_title = body.get("title")
+
+    template = next((t for t in BOARD_TEMPLATES if t["template_id"] == template_id), None)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    board_id = f"board_{uuid.uuid4().hex[:12]}"
+    board_doc = {
+        "board_id": board_id,
+        "title": custom_title or template["name"],
+        "description": template["description"],
+        "color": template["color"],
+        "user_id": user["user_id"],
+        "collaborators": [],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.boards.insert_one(board_doc)
+
+    for i, lst_tmpl in enumerate(template["lists"]):
+        list_id = f"list_{uuid.uuid4().hex[:12]}"
+        await db.lists.insert_one({
+            "list_id": list_id, "title": lst_tmpl["title"], "board_id": board_id,
+            "position": i, "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        for j, card_tmpl in enumerate(lst_tmpl.get("cards", [])):
+            card_id = f"card_{uuid.uuid4().hex[:12]}"
+            checklists = []
+            for cl in card_tmpl.get("checklists", []):
+                checklists.append({"item_id": f"check_{uuid.uuid4().hex[:12]}", "text": cl["text"], "completed": cl["completed"]})
+            await db.cards.insert_one({
+                "card_id": card_id, "title": card_tmpl["title"], "description": "",
+                "list_id": list_id, "position": j,
+                "priority": card_tmpl.get("priority", "medium"),
+                "due_date": None, "tags": card_tmpl.get("tags", []),
+                "checklists": checklists, "created_by": user["user_id"],
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+
+    board_doc.pop("_id", None)
+    return board_doc
+
+# ==================== STATS ====================
+
+@api_router.get("/stats")
+async def get_stats(request: Request):
+    user = await get_current_user(request)
+    user_id = user["user_id"]
+
+    boards = await db.boards.find(
+        {"$or": [{"user_id": user_id}, {"collaborators": user_id}]}, {"_id": 0}
+    ).to_list(100)
+    board_ids = [b["board_id"] for b in boards]
+
+    all_lists = await db.lists.find({"board_id": {"$in": board_ids}}, {"_id": 0}).to_list(1000)
+    list_ids = [l["list_id"] for l in all_lists]
+
+    total_cards = await db.cards.count_documents({"list_id": {"$in": list_ids}})
+
+    # Cards in "done" lists
+    done_list_ids = [l["list_id"] for l in all_lists if any(w in l["title"].lower() for w in ["termine", "done", "maitrise", "rendu"])]
+    completed_cards = await db.cards.count_documents({"list_id": {"$in": done_list_ids}}) if done_list_ids else 0
+
+    # Upcoming deadlines (next 7 days)
+    now = datetime.now(timezone.utc)
+    week_later = (now + timedelta(days=7)).isoformat()
+    now_iso = now.isoformat()
+    upcoming = await db.cards.find(
+        {"list_id": {"$in": list_ids}, "due_date": {"$ne": None, "$gte": now_iso, "$lte": week_later}},
+        {"_id": 0}
+    ).to_list(50)
+
+    # Overdue
+    overdue = await db.cards.find(
+        {"list_id": {"$in": list_ids}, "due_date": {"$ne": None, "$lt": now_iso}},
+        {"_id": 0}
+    ).to_list(50)
+    # Filter out cards in done lists
+    overdue = [c for c in overdue if c["list_id"] not in done_list_ids]
+
+    # Tag distribution
+    all_cards = await db.cards.find({"list_id": {"$in": list_ids}}, {"_id": 0, "tags": 1}).to_list(5000)
+    tag_counts = {}
+    for c in all_cards:
+        for tag in c.get("tags", []):
+            tag_counts[tag] = tag_counts.get(tag, 0) + 1
+    top_tags = sorted(tag_counts.items(), key=lambda x: -x[1])[:8]
+
+    # Checklist progress
+    all_checks = await db.cards.find({"list_id": {"$in": list_ids}, "checklists": {"$ne": []}}, {"_id": 0, "checklists": 1}).to_list(5000)
+    total_items = sum(len(c.get("checklists", [])) for c in all_checks)
+    done_items = sum(sum(1 for i in c.get("checklists", []) if i.get("completed")) for c in all_checks)
+
+    return {
+        "total_boards": len(boards),
+        "total_cards": total_cards,
+        "completed_cards": completed_cards,
+        "completion_rate": round((completed_cards / total_cards * 100) if total_cards else 0),
+        "upcoming_deadlines": len(upcoming),
+        "overdue_cards": len(overdue),
+        "overdue_list": overdue[:5],
+        "upcoming_list": upcoming[:5],
+        "top_tags": top_tags,
+        "checklist_total": total_items,
+        "checklist_done": done_items,
+    }
+
+# ==================== PROFILE ====================
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+
+@api_router.get("/profile")
+async def get_profile(request: Request):
+    user = await get_current_user(request)
+    return {"user_id": user["user_id"], "email": user["email"], "name": user["name"], "picture": user.get("picture"), "created_at": user["created_at"]}
+
+@api_router.put("/profile")
+async def update_profile(data: ProfileUpdate, request: Request):
+    user = await get_current_user(request)
+    update = {}
+    if data.name is not None: update["name"] = data.name
+    if update:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": update})
+    updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 0})
+    return updated
+
 # ==================== WEBSOCKET ====================
 
 @app.websocket("/api/ws/{board_id}")

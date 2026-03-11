@@ -12,8 +12,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import Navbar from '@/components/Navbar';
 import TaskCard from '@/components/TaskCard';
 import CardDetailModal from '@/components/CardDetailModal';
-import { Plus, ArrowLeft, MoreHorizontal, Trash2, X, Check } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Plus, ArrowLeft, MoreHorizontal, Trash2, X, Check, Search, Filter } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
 
 // ========== Sortable Card Wrapper ==========
 function SortableCard({ card, onClick }) {
@@ -174,6 +175,8 @@ export default function BoardView() {
   const [showAddList, setShowAddList] = useState(false);
   const [newListTitle, setNewListTitle] = useState('');
   const [activeCard, setActiveCard] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterPriority, setFilterPriority] = useState(null);
   const wsRef = useRef(null);
 
   const sensors = useSensors(
@@ -396,6 +399,21 @@ export default function BoardView() {
 
   const handleCardClick = (card) => setSelectedCard(card);
 
+  // Filter cards
+  const getFilteredList = (list) => {
+    if (!searchQuery && !filterPriority) return list;
+    return {
+      ...list,
+      cards: (list.cards || []).filter(card => {
+        const matchSearch = !searchQuery || card.title.toLowerCase().includes(searchQuery.toLowerCase()) || card.tags?.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchPriority = !filterPriority || card.priority === filterPriority;
+        return matchSearch && matchPriority;
+      }),
+    };
+  };
+
+  const hasActiveFilters = searchQuery || filterPriority;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -412,8 +430,8 @@ export default function BoardView() {
       <Navbar />
 
       {/* Board Header */}
-      <div className="px-6 py-4 border-b border-border/30 bg-background/80 glass-bar">
-        <div className="max-w-full flex items-center gap-4">
+      <div className="px-6 py-3 border-b border-border/30 bg-background/80 glass-bar">
+        <div className="max-w-full flex items-center gap-4 flex-wrap">
           <Button
             data-testid="back-to-dashboard-btn"
             variant="ghost"
@@ -430,6 +448,53 @@ export default function BoardView() {
           {board?.description && (
             <span className="text-sm text-muted-foreground hidden md:inline">{board.description}</span>
           )}
+          <div className="flex-1" />
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              data-testid="board-search-input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Rechercher..."
+              className="h-8 w-44 pl-8 text-xs"
+            />
+          </div>
+          {/* Filter */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button data-testid="filter-btn" variant={hasActiveFilters ? "default" : "outline"} size="sm" className="h-8 text-xs">
+                <Filter className="h-3.5 w-3.5 mr-1" /> Filtrer
+                {hasActiveFilters && <span className="ml-1 h-4 w-4 rounded-full bg-primary-foreground/20 text-[10px] flex items-center justify-center">!</span>}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem className="text-xs font-semibold text-muted-foreground" disabled>Priorite</DropdownMenuItem>
+              {['urgent', 'high', 'medium', 'low'].map(p => (
+                <DropdownMenuCheckboxItem
+                  key={p}
+                  checked={filterPriority === p}
+                  onCheckedChange={(checked) => setFilterPriority(checked ? p : null)}
+                  data-testid={`filter-priority-${p}`}
+                  className="text-xs"
+                >
+                  {p === 'urgent' ? 'Urgent' : p === 'high' ? 'Haute' : p === 'medium' ? 'Moyenne' : 'Basse'}
+                </DropdownMenuCheckboxItem>
+              ))}
+              {hasActiveFilters && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    data-testid="clear-filters-btn"
+                    className="text-xs text-destructive"
+                    onClick={() => { setSearchQuery(''); setFilterPriority(null); }}
+                  >
+                    Effacer les filtres
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -443,16 +508,19 @@ export default function BoardView() {
           onDragEnd={handleDragEnd}
         >
           <div className="board-canvas">
-            {board?.lists?.map(list => (
-              <ListColumn
-                key={list.list_id}
-                list={list}
-                onAddCard={addCard}
-                onDeleteList={deleteList}
-                onUpdateListTitle={updateListTitle}
-                onCardClick={handleCardClick}
-              />
-            ))}
+            {board?.lists?.map(list => {
+              const filteredList = getFilteredList(list);
+              return (
+                <ListColumn
+                  key={list.list_id}
+                  list={filteredList}
+                  onAddCard={addCard}
+                  onDeleteList={deleteList}
+                  onUpdateListTitle={updateListTitle}
+                  onCardClick={handleCardClick}
+                />
+              );
+            })}
 
             {/* Add List Button */}
             <div className="flex-shrink-0 w-72">

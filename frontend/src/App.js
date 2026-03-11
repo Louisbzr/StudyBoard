@@ -8,6 +8,7 @@ import AuthPage from "@/pages/AuthPage";
 import AuthCallback from "@/pages/AuthCallback";
 import Dashboard from "@/pages/Dashboard";
 import BoardView from "@/pages/BoardView";
+import ProfilePage from "@/pages/ProfilePage";
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -34,6 +35,7 @@ function AppRouter() {
       <Route path="/auth" element={<AuthPage />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/board/:boardId" element={<ProtectedRoute><BoardView /></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

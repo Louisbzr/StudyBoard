@@ -4,7 +4,7 @@ import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Sun, Moon, LogOut, User, LayoutDashboard } from 'lucide-react';
+import { Sun, Moon, LogOut, User, LayoutDashboard, Settings } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -59,6 +59,9 @@ export default function Navbar() {
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onClick={() => navigate('/dashboard')}>
                   <LayoutDashboard className="h-3.5 w-3.5 mr-2" /> Tableaux
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/profile')}>
+                  <User className="h-3.5 w-3.5 mr-2" /> Mon profil
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem data-testid="logout-btn" onClick={handleLogout}>

@@ -278,6 +278,113 @@ class StudyBoardAPITester:
         
         return success
 
+    def test_templates(self):
+        """Test board templates feature"""
+        # Get templates
+        success, response = self.make_request('GET', 'templates', None, 200)
+        if not success or not isinstance(response, list):
+            return self.log_test("Templates Get", False, f"Response: {response}")
+        
+        # Should have exactly 5 templates
+        template_count = len(response)
+        if template_count != 5:
+            return self.log_test("Templates Count", False, f"Expected 5 templates, got {template_count}")
+        
+        self.log_test("Templates Get", True, f"Retrieved {template_count} templates")
+        
+        # Test template structure
+        template = response[0]  # Get first template
+        required_fields = ['template_id', 'name', 'description', 'color', 'icon', 'lists']
+        has_all_fields = all(field in template for field in required_fields)
+        self.log_test("Templates Structure", has_all_fields, f"Template has all required fields")
+        
+        # Test create board from template
+        template_data = {
+            "template_id": template['template_id'],
+            "title": f"Test Template Board {datetime.now().strftime('%H:%M:%S')}"
+        }
+        
+        success, response = self.make_request('POST', 'boards/from-template', template_data, 200)
+        if not success or not isinstance(response, dict) or not response.get('board_id'):
+            return self.log_test("Template Create Board", False, f"Response: {response}")
+        
+        template_board_id = response['board_id']
+        self.log_test("Template Create Board", True, f"Board created from template: {template_board_id}")
+        
+        # Verify the template board has pre-filled content
+        success, response = self.make_request('GET', f'boards/{template_board_id}', None, 200)
+        if success and isinstance(response, dict):
+            lists_count = len(response.get('lists', []))
+            # Check if some lists have cards (templates should have pre-filled cards)
+            has_cards = any(len(lst.get('cards', [])) > 0 for lst in response.get('lists', []))
+            self.log_test("Template Board Content", has_cards, f"Template board has {lists_count} lists with pre-filled cards")
+            
+            # Cleanup template board
+            self.make_request('DELETE', f'boards/{template_board_id}', None, 200)
+        
+        return True
+
+    def test_stats(self):
+        """Test statistics feature"""
+        success, response = self.make_request('GET', 'stats', None, 200)
+        if not success or not isinstance(response, dict):
+            return self.log_test("Stats Get", False, f"Response: {response}")
+        
+        # Check required stats fields
+        required_fields = [
+            'total_boards', 'total_cards', 'completed_cards', 'completion_rate',
+            'upcoming_deadlines', 'overdue_cards', 'overdue_list', 'upcoming_list',
+            'top_tags', 'checklist_total', 'checklist_done'
+        ]
+        
+        has_all_fields = all(field in response for field in required_fields)
+        self.log_test("Stats Structure", has_all_fields, f"Stats has all required fields")
+        
+        # Validate data types
+        numeric_fields = ['total_boards', 'total_cards', 'completed_cards', 'completion_rate', 'upcoming_deadlines', 'overdue_cards', 'checklist_total', 'checklist_done']
+        list_fields = ['overdue_list', 'upcoming_list', 'top_tags']
+        
+        valid_types = True
+        for field in numeric_fields:
+            if not isinstance(response.get(field), (int, float)):
+                valid_types = False
+                break
+        for field in list_fields:
+            if not isinstance(response.get(field), list):
+                valid_types = False
+                break
+        
+        self.log_test("Stats Data Types", valid_types, "All stats fields have correct data types")
+        
+        return success
+
+    def test_profile(self):
+        """Test profile feature"""
+        # Get profile
+        success, response = self.make_request('GET', 'profile', None, 200)
+        if not success or not isinstance(response, dict):
+            return self.log_test("Profile Get", False, f"Response: {response}")
+        
+        # Should match user data
+        profile_matches = (
+            response.get('user_id') == self.user_data.get('user_id') and
+            response.get('email') == self.user_data.get('email')
+        )
+        self.log_test("Profile Get", profile_matches, f"Profile data matches user: {response.get('email')}")
+        
+        # Update profile
+        new_name = f"Updated Name {datetime.now().strftime('%H:%M:%S')}"
+        update_data = {"name": new_name}
+        
+        success, response = self.make_request('PUT', 'profile', update_data, 200)
+        if not success or not isinstance(response, dict):
+            return self.log_test("Profile Update", False, f"Response: {response}")
+        
+        name_updated = response.get('name') == new_name
+        self.log_test("Profile Update", name_updated, f"Profile name updated to: {new_name}")
+        
+        return success
+
     def cleanup_test_data(self):
         """Clean up test data"""
         if self.test_board_id:
@@ -308,6 +415,11 @@ class StudyBoardAPITester:
         self.test_checklist_operations()
         self.test_comments_operations()
         self.test_card_move_operation()
+        
+        # Test NEW features (iteration 2)
+        self.test_templates()
+        self.test_stats()
+        self.test_profile()
         
         # Cleanup
         self.cleanup_test_data()
