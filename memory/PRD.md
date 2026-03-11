@@ -13,16 +13,8 @@ Application web full-stack inspirée de Trello pour étudiants: gestion de tâch
 1. **Étudiant** - Organise cours, projets, révisions
 2. **Groupe d'étudiants** - Collaboration sur projets communs
 
-## Core Requirements (Static)
-- Authentification (JWT + Google OAuth)
-- CRUD Tableaux, Listes, Cartes
-- Drag & Drop entre listes
-- Checklists, Dates limites, Tags, Priorités
-- Commentaires sur cartes
-- Collaboration temps réel (WebSocket)
-- Mode sombre/clair
-
 ## What's Been Implemented (March 2026)
+### Phase 1 - MVP
 - [x] Complete backend API (18+ endpoints)
 - [x] JWT Auth (register/login) + Google OAuth via Emergent
 - [x] Board CRUD with auto-created default lists
@@ -31,30 +23,28 @@ Application web full-stack inspirée de Trello pour étudiants: gestion de tâch
 - [x] Checklist CRUD (add/toggle/delete items)
 - [x] Comments system
 - [x] WebSocket real-time updates
-- [x] Landing page with hero + features
-- [x] Auth page (login/register + Google)
-- [x] Dashboard with board grid
-- [x] Board view with DnD (@dnd-kit)
+- [x] Landing page, Auth page, Dashboard, Board view
 - [x] Card detail modal (description, priority, due date, tags, checklists, comments)
 - [x] Dark/Light mode toggle
 - [x] Responsive design
-- [x] All tests passing (100%)
+
+### Phase 2 - Templates, Stats, Search, Profile
+- [x] 5 Board templates (Projet Scolaire, Révisions Examens, Planning Semestre, Sprint Agile, Lecture & Recherche)
+- [x] Dashboard statistics (boards, cards, completion rate, overdue, deadlines)
+- [x] Global progress bar
+- [x] Search bar on board view (filter by title/tag)
+- [x] Priority filter on board view
+- [x] Profile page with editable name
+- [x] Profile stats (boards, cards, checklists, tags, overdue alerts)
 
 ## Prioritized Backlog
-### P0 (Critical) - All Done
 ### P1 (Important)
-- User profile management page
-- Board sharing/collaboration invitation
-- Notifications
+- Board sharing/collaboration invitations
+- Notifications system
+- Activity history/feed
 ### P2 (Nice-to-have)
-- Board templates
-- Search/filter cards
-- Export board data
-- Activity history
 - File attachments on cards
-
-## Next Tasks
-1. Profile management page
-2. Board collaboration invitations
-3. Card search/filter
-4. Notification system
+- Export board data (PDF/CSV)
+- Board duplication
+- Card labels with custom colors
+- Keyboard shortcuts
