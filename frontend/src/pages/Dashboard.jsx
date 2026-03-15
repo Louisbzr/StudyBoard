@@ -36,19 +36,24 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       const [boardsRes, templatesRes, statsRes] = await Promise.all([
-        api.get('/boards'),
-        api.get('/templates'),
+        api.get('/boards').catch(err => {
+          console.error('Boards error:', err.response?.data || err.message);
+          return { data: [] };  // ← Force array vide
+        }),
+        api.get('/templates').catch(() => ({ data: [] })),
         api.get('/stats').catch(() => ({ data: null })),
       ]);
-      setBoards(boardsRes.data);
-      setTemplates(templatesRes.data);
+      setBoards(Array.isArray(boardsRes.data) ? boardsRes.data : []);  // ← Safe
+      setTemplates(Array.isArray(templatesRes.data) ? templatesRes.data : []);
       setStats(statsRes.data);
-    } catch {
-      toast.error('Erreur lors du chargement');
+    } catch (err) {
+      console.error('Dashboard fetch error:', err);
+      toast.error('Erreur chargement');
     } finally {
       setLoading(false);
     }
   };
+
 
   useEffect(() => { fetchData(); }, []);
 
