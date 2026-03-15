@@ -91,6 +91,9 @@ class CommentCreate(BaseModel):
     card_id: str
     text: str
 
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+
 # ==================== AUTH HELPERS ====================
 
 async def get_current_user(request: Request) -> dict:
@@ -276,6 +279,52 @@ async def get_boards(request: Request):
         board["list_count"] = len(lists)
     return boards
 
+@api_router.post("/boards/from-template")
+async def create_board_from_template(request: Request):
+    user = await get_current_user(request)
+    body = await request.json()
+    template_id = body.get("template_id")
+    custom_title = body.get("title")
+
+    template = next((t for t in BOARD_TEMPLATES if t["template_id"] == template_id), None)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    board_id = f"board_{uuid.uuid4().hex[:12]}"
+    board_doc = {
+        "board_id": board_id,
+        "title": custom_title or template["name"],
+        "description": template["description"],
+        "color": template["color"],
+        "user_id": user["user_id"],
+        "collaborators": [],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.boards.insert_one(board_doc)
+
+    for i, lst_tmpl in enumerate(template["lists"]):
+        list_id = f"list_{uuid.uuid4().hex[:12]}"
+        await db.lists.insert_one({
+            "list_id": list_id, "title": lst_tmpl["title"], "board_id": board_id,
+            "position": i, "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        for j, card_tmpl in enumerate(lst_tmpl.get("cards", [])):
+            card_id = f"card_{uuid.uuid4().hex[:12]}"
+            checklists = []
+            for cl in card_tmpl.get("checklists", []):
+                checklists.append({"item_id": f"check_{uuid.uuid4().hex[:12]}", "text": cl["text"], "completed": cl["completed"]})
+            await db.cards.insert_one({
+                "card_id": card_id, "title": card_tmpl["title"], "description": "",
+                "list_id": list_id, "position": j,
+                "priority": card_tmpl.get("priority", "medium"),
+                "due_date": None, "tags": card_tmpl.get("tags", []),
+                "checklists": checklists, "created_by": user["user_id"],
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+
+    board_doc.pop("_id", None)
+    return board_doc
+
 @api_router.post("/boards")
 async def create_board(data: BoardCreate, request: Request):
     user = await get_current_user(request)
@@ -351,13 +400,11 @@ async def delete_board(board_id: str, request: Request):
     lists = await db.lists.find({"board_id": board_id}, {"_id": 0}).to_list(100)
     for lst in lists:
         await db.cards.delete_many({"list_id": lst["list_id"]})
-        await db.comments.delete_many({"card_id": {"$regex": "^card_"}})
     await db.lists.delete_many({"board_id": board_id})
     await db.boards.delete_one({"board_id": board_id})
     return {"message": "Board deleted"}
 
 # ==================== LIST ROUTES ====================
-# IMPORTANT: /lists/reorder MUST be before /lists/{list_id}
 
 @api_router.put("/lists/reorder")
 async def reorder_lists(data: ListReorder, request: Request):
@@ -416,7 +463,6 @@ async def delete_list(list_id: str, request: Request):
     return {"message": "List deleted"}
 
 # ==================== CARD ROUTES ====================
-# IMPORTANT: /cards/move MUST be before /cards/{card_id}
 
 @api_router.put("/cards/move")
 async def move_card(data: CardMove, request: Request):
@@ -430,12 +476,10 @@ async def move_card(data: CardMove, request: Request):
         {"$set": {"list_id": data.target_list_id, "position": data.new_position}}
     )
 
-    # Reorder target list
     target_cards = await db.cards.find({"list_id": data.target_list_id}).sort("position", 1).to_list(1000)
     for i, c in enumerate(target_cards):
         await db.cards.update_one({"card_id": c["card_id"]}, {"$set": {"position": i}})
 
-    # Reorder source list if different
     if data.source_list_id != data.target_list_id:
         source_cards = await db.cards.find({"list_id": data.source_list_id}).sort("position", 1).to_list(1000)
         for i, c in enumerate(source_cards):
@@ -696,52 +740,6 @@ BOARD_TEMPLATES = [
 async def get_templates():
     return BOARD_TEMPLATES
 
-@api_router.post("/boards/from-template")
-async def create_board_from_template(request: Request, template_id: str = None, title: str = None):
-    user = await get_current_user(request)
-    body = await request.json()
-    template_id = body.get("template_id")
-    custom_title = body.get("title")
-
-    template = next((t for t in BOARD_TEMPLATES if t["template_id"] == template_id), None)
-    if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
-
-    board_id = f"board_{uuid.uuid4().hex[:12]}"
-    board_doc = {
-        "board_id": board_id,
-        "title": custom_title or template["name"],
-        "description": template["description"],
-        "color": template["color"],
-        "user_id": user["user_id"],
-        "collaborators": [],
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.boards.insert_one(board_doc)
-
-    for i, lst_tmpl in enumerate(template["lists"]):
-        list_id = f"list_{uuid.uuid4().hex[:12]}"
-        await db.lists.insert_one({
-            "list_id": list_id, "title": lst_tmpl["title"], "board_id": board_id,
-            "position": i, "created_at": datetime.now(timezone.utc).isoformat()
-        })
-        for j, card_tmpl in enumerate(lst_tmpl.get("cards", [])):
-            card_id = f"card_{uuid.uuid4().hex[:12]}"
-            checklists = []
-            for cl in card_tmpl.get("checklists", []):
-                checklists.append({"item_id": f"check_{uuid.uuid4().hex[:12]}", "text": cl["text"], "completed": cl["completed"]})
-            await db.cards.insert_one({
-                "card_id": card_id, "title": card_tmpl["title"], "description": "",
-                "list_id": list_id, "position": j,
-                "priority": card_tmpl.get("priority", "medium"),
-                "due_date": None, "tags": card_tmpl.get("tags", []),
-                "checklists": checklists, "created_by": user["user_id"],
-                "created_at": datetime.now(timezone.utc).isoformat()
-            })
-
-    board_doc.pop("_id", None)
-    return board_doc
-
 # ==================== STATS ====================
 
 @api_router.get("/stats")
@@ -759,11 +757,9 @@ async def get_stats(request: Request):
 
     total_cards = await db.cards.count_documents({"list_id": {"$in": list_ids}})
 
-    # Cards in "done" lists
     done_list_ids = [l["list_id"] for l in all_lists if any(w in l["title"].lower() for w in ["termine", "done", "maitrise", "rendu"])]
     completed_cards = await db.cards.count_documents({"list_id": {"$in": done_list_ids}}) if done_list_ids else 0
 
-    # Upcoming deadlines (next 7 days)
     now = datetime.now(timezone.utc)
     week_later = (now + timedelta(days=7)).isoformat()
     now_iso = now.isoformat()
@@ -772,15 +768,12 @@ async def get_stats(request: Request):
         {"_id": 0}
     ).to_list(50)
 
-    # Overdue
     overdue = await db.cards.find(
         {"list_id": {"$in": list_ids}, "due_date": {"$ne": None, "$lt": now_iso}},
         {"_id": 0}
     ).to_list(50)
-    # Filter out cards in done lists
     overdue = [c for c in overdue if c["list_id"] not in done_list_ids]
 
-    # Tag distribution
     all_cards = await db.cards.find({"list_id": {"$in": list_ids}}, {"_id": 0, "tags": 1}).to_list(5000)
     tag_counts = {}
     for c in all_cards:
@@ -788,7 +781,6 @@ async def get_stats(request: Request):
             tag_counts[tag] = tag_counts.get(tag, 0) + 1
     top_tags = sorted(tag_counts.items(), key=lambda x: -x[1])[:8]
 
-    # Checklist progress
     all_checks = await db.cards.find({"list_id": {"$in": list_ids}, "checklists": {"$ne": []}}, {"_id": 0, "checklists": 1}).to_list(5000)
     total_items = sum(len(c.get("checklists", [])) for c in all_checks)
     done_items = sum(sum(1 for i in c.get("checklists", []) if i.get("completed")) for c in all_checks)
@@ -808,9 +800,6 @@ async def get_stats(request: Request):
     }
 
 # ==================== PROFILE ====================
-
-class ProfileUpdate(BaseModel):
-    name: Optional[str] = None
 
 @api_router.get("/profile")
 async def get_profile(request: Request):
@@ -846,10 +835,13 @@ async def websocket_endpoint(websocket: WebSocket, board_id: str):
 
 app.include_router(api_router)
 
+origins = os.environ.get('CORS_ORIGINS', '').split(',')
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
