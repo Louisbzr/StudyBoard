@@ -4,7 +4,7 @@ import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Sun, Moon, LogOut, User, LayoutDashboard, Settings } from 'lucide-react';
+import { Sun, Moon, LogOut, User, LayoutDashboard } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -26,9 +26,7 @@ export default function Navbar() {
           onClick={() => navigate(user ? '/dashboard' : '/')}
           className="flex items-center gap-2 hover:opacity-80 transition-opacity"
         >
-          <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-xs">SB</span>
-          </div>
+          <img src="/studyboard_logo.svg" alt="StudyBoard" width={32} height={32} />
           <span className="font-bold text-lg tracking-tight hidden sm:inline">StudyBoard</span>
         </button>
 

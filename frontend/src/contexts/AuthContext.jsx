@@ -38,12 +38,6 @@ export function AuthProvider({ children }) {
     return res.data;
   };
 
-  const loginWithGoogle = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + '/dashboard';
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-  };
-
   const logout = async () => {
     try { await api.post('/auth/logout'); } catch {}
     setUser(null);
@@ -51,7 +45,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, loginWithGoogle, logout, setUser, checkAuth }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, setUser, checkAuth }}>
       {children}
     </AuthContext.Provider>
   );
